@@ -10,6 +10,7 @@ const INITIAL_VOLUME = 0.2
 const INITIAL_BASE_FREQ_HZ = 240
 const INITIAL_TONE_RATIO = 0.1
 const INITIAL_OVERTONE_MULT = 2
+const INITIAL_DELAY_BOX_GAIN = 1
 const TUNE_TIME_S = 5
 
 const nodesToStart = []
@@ -40,32 +41,8 @@ toneRatioSubtract.connect(oscGain1.gain)
 
 const layer1In = new Tone.Gain(1)
 const layer1Out = new Tone.Gain(1)
-const layer2In = new Tone.Gain(-1/2)
-const layer2Out = new Tone.Gain(1)
-const delay1 = new Tone.Delay(1)
-const delay2 = new Tone.Delay(1)
-const delay3 = new Tone.Delay(1)
-delay1.delayTime.value = 107/44100
-delay2.delayTime.value = 227/44100
-delay3.delayTime.value = 2000/44100
-
-const masterVolumeGain = new Tone.Gain(INITIAL_VOLUME)
-const masterSwitchGain = new Tone.Gain(0)
-
-const delay1Osc = needStart(new Tone.Oscillator(255/1000, 'triangle'))
-const delay1GainOsc = new Tone.Gain(100/44100)
-delay1Osc.connect(delay1GainOsc)
-delay1GainOsc.connect(delay1.delayTime)
-
-const delay2Osc = needStart(new Tone.Oscillator(397/1000, 'triangle'))
-const delay2GainOsc = new Tone.Gain(200/44100)
-delay2Osc.connect(delay2GainOsc)
-delay2GainOsc.connect(delay2.delayTime)
-
-const delay3Osc = needStart(new Tone.Oscillator(210/1000, 'triangle'))
-const delay3GainOsc = new Tone.Gain(1500/44100)
-delay3Osc.connect(delay3GainOsc)
-delay3GainOsc.connect(delay3.delayTime)
+const layer2In = new Tone.Gain(0)
+const layer2Out = new Tone.Gain(0)
 
 oscNode1.connect(oscGain1)
 oscNode2.connect(oscGain2)
@@ -75,23 +52,46 @@ oscGain.connect(layer1In)
 layer1In.connect(layer2In)
 layer2Out.connect(layer1Out)
 layer1In.connect(layer1Out)
-layer2In.connect(delay1)
-layer2In.connect(delay2)
-delay1.connect(layer2Out)
-delay2.connect(layer2Out)
 
+const masterVolumeGain = new Tone.Gain(INITIAL_VOLUME)
+const masterSwitchGain = new Tone.Gain(0)
 layer1Out.connect(masterVolumeGain)
 masterVolumeGain.connect(masterSwitchGain)
 masterSwitchGain.toDestination()
 
+let countDelays = 0
+// const addDelay = (delayTimeMinS, delayTimeMaxS, oscTimeS) => {
+const addDelay = (nodeIn, nodeOut, minResHz, maxResHz, oscTimeS) => {
+    const minDelayTimeS = 1 / minResHz
+    const maxDelayTimeS = 1 / maxResHz
+    const midDelayTimeS = 0.5 * (minDelayTimeS + maxDelayTimeS)
+    const delayOsc = needStart(new Tone.Oscillator(1 / oscTimeS, 'triangle'))
+    const delayGainOsc = new Tone.Gain(maxDelayTimeS - midDelayTimeS)
+    const delayNode = new Tone.Delay(1) // max delay time of 1s
+    delayNode.delayTime.value = midDelayTimeS
+    nodeIn.connect(delayNode)
+    delayNode.connect(nodeOut)
+    delayOsc.connect(delayGainOsc)
+    delayGainOsc.connect(delayNode.delayTime)
+    countDelays++    
+}
+addDelay(layer2In, layer2Out, 200, 1000, 13/10)
+addDelay(layer2In, layer2Out, 400, 8000, 17/10)
+// addDelay(layer2In, layer2Out, 2000, 10000, 23/10)
+layer2In.gain.value = -1 / countDelays
+layer2Out.gain.value = INITIAL_DELAY_BOX_GAIN
+
+
 const SynthPad = () => {
+    
+    const [needsInitialStart, setNeedsInitialStart] = useState(true)
+    const [isPlaying, setIsPlaying] = useState(false)
 
     const [baseFreqValue, setBaseFreqValue] = useState(INITIAL_BASE_FREQ_HZ)
     const [masterVolumeGainValue, setMasterVolumeGainValue] = useState(INITIAL_VOLUME)
     const [toneRatioValue, setToneRatioValue] = useState(INITIAL_TONE_RATIO)
     const [overtoneMultValue, setOvertoneMultValue] = useState(INITIAL_OVERTONE_MULT)
-    const [needsInitialStart, setNeedsInitialStart] = useState(true)
-    const [isPlaying, setIsPlaying] = useState(false)
+    const [delayBoxGainValue, setDelayBoxGainValue] = useState(INITIAL_DELAY_BOX_GAIN)
 
     const initialStart = () => {
         console.log(`Starting ${nodesToStart.length} audio nodes...`)
@@ -128,6 +128,7 @@ const SynthPad = () => {
     const updateMasterVolume = e => updateFn(e, masterVolumeGain.gain, setMasterVolumeGainValue, v => `New master volume: ${v}`)
     const updateToneRatio = e => updateFn(e, toneRatioSignal, setToneRatioValue, v => `New tone ratio: ${v}`)
     const updateOvertoneMult = e => updateFn(e, oscFMult2.gain, setOvertoneMultValue, v => `New overtone mult: ${v}`)
+    const updateDelayBoxGain = e => updateFn(e, layer2Out.gain, setDelayBoxGainValue, v => `New delay box gain: ${v}`)
 
     const playTune = () => {
         // Cache some values
@@ -209,6 +210,15 @@ const SynthPad = () => {
                 step='0.5'
                 value={overtoneMultValue}
                 onChange={updateOvertoneMult}
+            />
+            <p>Delay Box Gain: </p>
+            <input
+                type="range"
+                min='0'
+                max='1'
+                step='0.1'
+                value={delayBoxGainValue}
+                onChange={updateDelayBoxGain}
             />
         </div>
     );
