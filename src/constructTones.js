@@ -5,22 +5,40 @@ import * as Tone from 'tone'
 export const addFMOsc = ({
     freq, // audioNode to control base frequency of this oscillator
     needStart, // function to add audioNode to list of nodes to start later
-    type = 'sine', // optionally specify type of oscillator
+    type = 'sine', // optional, specify type of oscillator
     fm = 1, // optional, initial value of frequency multiplier
     output = null // optional, where to send the output
 }) => {
-    const oscFMult1 = new Tone.Gain(fm)
-    const oscNode1 = needStart(new Tone.Oscillator(0, type))
-    const oscGain1 = new Tone.Gain(0)
-    freq.connect(oscFMult1)
-    oscFMult1.connect(oscNode1.frequency)
-    oscNode1.connect(oscGain1)
-    if (output) oscGain1.connect(output)
+    const freqMultiplierGain = new Tone.Gain(fm)
+    const oscNode = needStart(new Tone.Oscillator(0, type))
+    const oscGain = new Tone.Gain(0)
+    freq.connect(freqMultiplierGain)
+    freqMultiplierGain.connect(oscNode.frequency)
+    oscNode.connect(oscGain)
+    if (output) oscGain.connect(output)
     const result = {
-        gain: oscGain1.gain,
-        fm: oscFMult1.gain
+        gain: oscGain.gain,
+        fm: freqMultiplierGain.gain
     }
     console.log('addFMOsc ran with result:')
+    console.log(result)
+    return result
+}
+
+// Make a noise generator with gain control
+export const addNoise = ({
+    needStart, // function to add audioNode to list of nodes to start later
+    type = 'white', // optional, specify type of noise
+    output = null // optional, where to send the output
+}) => {
+    const noiseNode = needStart(new Tone.Noise(type))
+    const noiseGain = new Tone.Gain(0)
+    noiseNode.connect(noiseGain)
+    if (output) noiseGain.connect(output)
+    const result = {
+        gain: noiseGain.gain
+    }
+    console.log('addNoise ran with result:')
     console.log(result)
     return result
 }

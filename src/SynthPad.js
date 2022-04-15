@@ -4,7 +4,7 @@ import './SynthPad.css';
 import * as Tone from 'tone'
 import { randint } from './helpers'
 import { getRandomTune } from './music'
-import { addFMOsc, addFader } from './constructTones'
+import { addFMOsc, addNoise, addFader } from './constructTones'
 
 const UPDATE_PARAM_TIME_S = 0.015
 const INITIAL_VOLUME = 0.1
@@ -22,7 +22,9 @@ const oscsOut = new Tone.Gain(1)
 
 const { gain: oscg0, fm: fm0 } = addFMOsc({ type: 'triangle', needStart, output: oscsOut, freq: baseFreqSignal, fm: 1 })
 const { gain: oscg1, fm: fm1 } = addFMOsc({ type: 'sawtooth', needStart, output: oscsOut, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
+const { gain: noiseGain } = addNoise({ type: 'white', needStart, output: oscsOut })
 const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: oscg1 })
+// const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: noiseGain }) // Working alternative
 
 const layer1In = new Tone.Gain(1)
 const layer1Out = new Tone.Gain(1)
