@@ -9,6 +9,7 @@ import { addFMOsc, addNoise, addFader, addResonator } from './constructTones'
 const UPDATE_PARAM_TIME_S = 0.015
 const INITIAL_VOLUME = 0.10
 const INITIAL_BASE_FREQ_HZ = 120 + 25 * Math.floor(15 * Math.random())
+const INITIAL_NOISE_RATIO = 0.01
 const INITIAL_TONE_RATIO = 0.15
 const INITIAL_DISTORTION = 1.30
 const INITIAL_OVERTONE_MULT = 2.00
@@ -21,7 +22,8 @@ const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
 
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
-const oscsOut = new Tone.Gain(1)
+const oscsGain = new Tone.Gain(0) // Combine osc0 and osc1, gain controlled by faderN
+const oscNoiseGain = new Tone.Gain(1) // Combine oscsGain and noise
 const layer1In = new Tone.Gain(1)
 const layer1Out = new Tone.Gain(1)
 const layer2In = new Tone.Gain(0)
@@ -30,7 +32,8 @@ const masterVolumeGain = new Tone.Gain(INITIAL_VOLUME)
 const masterReverbLong = new Tone.Reverb(LONG_REVERB_TIME_S)
 masterReverbLong.wet.value = LONG_REVERB_WET
 const masterSwitchGain = new Tone.Gain(0)
-oscsOut.connect(layer1In)
+oscsGain.connect(oscNoiseGain)
+oscNoiseGain.connect(layer1In)
 layer1In.connect(layer2In)
 layer2Out.connect(layer1Out)
 layer1In.connect(layer1Out)
@@ -39,11 +42,11 @@ masterVolumeGain.connect(masterReverbLong)
 masterReverbLong.connect(masterSwitchGain)
 masterSwitchGain.toDestination()
 
-const { gain: oscg0, distort: d0 } = addFMOsc({ type: 'sine', needStart, output: oscsOut, freq: baseFreqSignal, distortion: true })
-const { gain: oscg1, fm: fm1 } = addFMOsc({ type: 'sawtooth', needStart, output: oscsOut, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
-const { gain: noiseGain } = addNoise({ type: 'white', needStart, output: oscsOut })
+const { gain: oscg0, distort: d0 } = addFMOsc({ type: 'sine', needStart, output: oscsGain, freq: baseFreqSignal, distortion: true })
+const { gain: oscg1, fm: fm1 } = addFMOsc({ type: 'sawtooth', needStart, output: oscsGain, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
+const { gain: noiseGain } = addNoise({ type: 'white', needStart, output: oscNoiseGain })
 const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: oscg1 })
-// const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: noiseGain }) // Working alternative
+const { fader: faderN } = addFader({ value: INITIAL_NOISE_RATIO, fade0: oscsGain.gain, fade1: noiseGain })
 
 // Cancel out any DC using 1 or more Resonators (recommend 2 to 4)
 let countResonators = 0
@@ -66,6 +69,7 @@ const SynthPad = () => {
     const [baseFreqValue, setBaseFreqValue] = useState(INITIAL_BASE_FREQ_HZ)
     const [masterVolumeGainValue, setMasterVolumeGainValue] = useState(INITIAL_VOLUME)
     const [distortionValue, setDistortionValue] = useState(INITIAL_DISTORTION)
+    const [noiseRatioValue, setNoiseRatioValue] = useState(INITIAL_NOISE_RATIO)
     const [toneRatioValue, setToneRatioValue] = useState(INITIAL_TONE_RATIO)
     const [overtoneMultValue, setOvertoneMultValue] = useState(INITIAL_OVERTONE_MULT)
     const [delayBoxGainValue, setDelayBoxGainValue] = useState(INITIAL_DELAY_BOX_GAIN)
@@ -74,6 +78,7 @@ const SynthPad = () => {
     const updateBaseFreq = e => updateFn(e, baseFreqSignal, setBaseFreqValue, v => `New base freq: ${v} Hz`)
     const updateMasterVolume = e => updateFn(e, masterVolumeGain.gain, setMasterVolumeGainValue, v => `New master volume: ${v}`)
     const updateDistortion = e => updateFn(e, d0, setDistortionValue, v => `New distortion: ${v}`)
+    const updateNoiseRatio = e => updateFn(e, faderN, setNoiseRatioValue, v => `New noise ratio: ${v}`)
     const updateToneRatio = e => updateFn(e, fader01, setToneRatioValue, v => `New tone ratio: ${v}`)
     const updateOvertoneMult = e => updateFn(e, fm1, setOvertoneMultValue, v => `New overtone mult: ${v}`)
     const updateDelayBoxGain = e => updateFn(e, layer2Out.gain, setDelayBoxGainValue, v => `New delay box gain: ${v}`)
@@ -181,6 +186,15 @@ const SynthPad = () => {
                 step='0.1'
                 value={distortionValue}
                 onChange={updateDistortion}
+            />
+            <p>Noise Ratio: </p>
+            <input
+                type="range"
+                min='0'
+                max='0.1'
+                step='0.001'
+                value={noiseRatioValue}
+                onChange={updateNoiseRatio}
             />
             <p>Tone Ratio: </p>
             <input
