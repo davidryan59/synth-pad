@@ -1,32 +1,32 @@
 // import React, { useState, useEffect } from 'react';
-import React, { useState } from 'react';
+import React, { useState } from 'react'
 import './SynthPad.css';
 import * as Tone from 'tone'
 import { randint } from './helpers'
 import { getRandomTune } from './music'
+import { addFaderSignal } from './constructTones'
 
 const UPDATE_PARAM_TIME_S = 0.015
-const INITIAL_VOLUME = 0.2
-const INITIAL_BASE_FREQ_HZ = 240
-const INITIAL_TONE_RATIO = 0.1
-const INITIAL_OVERTONE_MULT = 2
+const INITIAL_VOLUME = 0.1
+const INITIAL_BASE_FREQ_HZ = 120 + 25 * Math.floor(15 * Math.random())
+const INITIAL_TONE_RATIO = 0.2
+const INITIAL_OVERTONE_MULT = 1
 const INITIAL_DELAY_BOX_GAIN = 1
 const TUNE_TIME_S = 5
 
 const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
 
-const oneConstSignal = new Tone.Signal(1)
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
-const toneRatioSignal = new Tone.Signal(INITIAL_TONE_RATIO)
-const toneRatioSubtract = new Tone.Subtract(0)
 
 const oscFMult1 = new Tone.Gain(1)
-const oscFMult2 = new Tone.Gain(INITIAL_OVERTONE_MULT)
 const oscNode1 = needStart(new Tone.Oscillator(0, 'triangle'))
-const oscNode2 = needStart(new Tone.Oscillator(0, 'sawtooth'))
 const oscGain1 = new Tone.Gain(0)
+
+const oscFMult2 = new Tone.Gain(INITIAL_OVERTONE_MULT)
+const oscNode2 = needStart(new Tone.Oscillator(0, 'sawtooth'))
 const oscGain2 = new Tone.Gain(0)
+
 const oscGain = new Tone.Gain(1)
 
 baseFreqSignal.connect(oscFMult1)
@@ -34,10 +34,13 @@ baseFreqSignal.connect(oscFMult2)
 oscFMult1.connect(oscNode1.frequency)
 oscFMult2.connect(oscNode2.frequency)
 
-toneRatioSignal.connect(oscGain2.gain)
-oneConstSignal.connect(toneRatioSubtract)
-toneRatioSignal.connect(toneRatioSubtract.subtrahend)
-toneRatioSubtract.connect(oscGain1.gain)
+const { faderSignal: toneRatioSignal } = addFaderSignal({
+    value: INITIAL_TONE_RATIO,
+    fade0: oscGain1.gain,
+    fade1: oscGain2.gain,
+})
+console.log(`Tone ratio signal`)
+console.log(toneRatioSignal)
 
 const layer1In = new Tone.Gain(1)
 const layer1Out = new Tone.Gain(1)
@@ -60,24 +63,29 @@ masterVolumeGain.connect(masterSwitchGain)
 masterSwitchGain.toDestination()
 
 let countDelays = 0
-// const addDelay = (delayTimeMinS, delayTimeMaxS, oscTimeS) => {
-const addDelay = (nodeIn, nodeOut, minResHz, maxResHz, oscTimeS) => {
-    const minDelayTimeS = 1 / minResHz
-    const maxDelayTimeS = 1 / maxResHz
+const addOscillatingResonator = (minResHz, maxResHz, oscPeriodS) => {
+    // Gain of -1, then a delay, gives t = 1 / 2f for delay time t and resonant frequency f
+    // Frequencies f, 3f, 5f... are boosted by 2x
+    // Frequencies 2f, 4f, 6f... are cancelled out
+    const minDelayTimeS = 1 / (2 * maxResHz)
+    const maxDelayTimeS = 1 / (2 * minResHz)
     const midDelayTimeS = 0.5 * (minDelayTimeS + maxDelayTimeS)
-    const delayOsc = needStart(new Tone.Oscillator(1 / oscTimeS, 'triangle'))
-    const delayGainOsc = new Tone.Gain(maxDelayTimeS - midDelayTimeS)
+    const ampDelayTimeS = Math.abs(maxDelayTimeS - midDelayTimeS)
+    console.log(`Delay times: min ${minDelayTimeS}, mid ${midDelayTimeS}, max ${maxDelayTimeS}, ampl ${ampDelayTimeS}`)
+    const delayOsc = needStart(new Tone.Oscillator(1 / oscPeriodS, 'sine'))
+    const delayGainOsc = new Tone.Gain(ampDelayTimeS)
     const delayNode = new Tone.Delay(1) // max delay time of 1s
     delayNode.delayTime.value = midDelayTimeS
-    nodeIn.connect(delayNode)
-    delayNode.connect(nodeOut)
+    layer2In.connect(delayNode)
+    delayNode.connect(layer2Out)
     delayOsc.connect(delayGainOsc)
     delayGainOsc.connect(delayNode.delayTime)
     countDelays++    
 }
-addDelay(layer2In, layer2Out, 200, 1000, 13/10)
-addDelay(layer2In, layer2Out, 400, 8000, 17/10)
-// addDelay(layer2In, layer2Out, 2000, 10000, 23/10)
+addOscillatingResonator(17.1, 29.9, 89/10)
+addOscillatingResonator(181, 299, 53/10)
+// addOscillatingResonator(451, 719, 73/10)
+// addOscillatingResonator(637, 1057, 97/10)
 layer2In.gain.value = -1 / countDelays
 layer2Out.gain.value = INITIAL_DELAY_BOX_GAIN
 
