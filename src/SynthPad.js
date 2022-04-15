@@ -13,6 +13,8 @@ const INITIAL_TONE_RATIO = 0.15
 const INITIAL_DISTORTION = 1.30
 const INITIAL_OVERTONE_MULT = 2.00
 const INITIAL_DELAY_BOX_GAIN = 1.00
+const LONG_REVERB_TIME_S = 2
+const LONG_REVERB_WET = 0.2
 const TUNE_TIME_S = 5.0
 
 const nodesToStart = []
@@ -25,13 +27,16 @@ const layer1Out = new Tone.Gain(1)
 const layer2In = new Tone.Gain(0)
 const layer2Out = new Tone.Gain(0)
 const masterVolumeGain = new Tone.Gain(INITIAL_VOLUME)
+const masterReverbLong = new Tone.Reverb(LONG_REVERB_TIME_S)
+masterReverbLong.wet.value = LONG_REVERB_WET
 const masterSwitchGain = new Tone.Gain(0)
 oscsOut.connect(layer1In)
 layer1In.connect(layer2In)
 layer2Out.connect(layer1Out)
 layer1In.connect(layer1Out)
 layer1Out.connect(masterVolumeGain)
-masterVolumeGain.connect(masterSwitchGain)
+masterVolumeGain.connect(masterReverbLong)
+masterReverbLong.connect(masterSwitchGain)
 masterSwitchGain.toDestination()
 
 const { gain: oscg0, distort: d0 } = addFMOsc({ type: 'sine', needStart, output: oscsOut, freq: baseFreqSignal, distortion: true })
@@ -64,6 +69,7 @@ const SynthPad = () => {
     const [toneRatioValue, setToneRatioValue] = useState(INITIAL_TONE_RATIO)
     const [overtoneMultValue, setOvertoneMultValue] = useState(INITIAL_OVERTONE_MULT)
     const [delayBoxGainValue, setDelayBoxGainValue] = useState(INITIAL_DELAY_BOX_GAIN)
+    const [longReverbWetValue, setLongReverbWetValue] = useState(LONG_REVERB_WET)
     
     const updateBaseFreq = e => updateFn(e, baseFreqSignal, setBaseFreqValue, v => `New base freq: ${v} Hz`)
     const updateMasterVolume = e => updateFn(e, masterVolumeGain.gain, setMasterVolumeGainValue, v => `New master volume: ${v}`)
@@ -71,6 +77,7 @@ const SynthPad = () => {
     const updateToneRatio = e => updateFn(e, fader01, setToneRatioValue, v => `New tone ratio: ${v}`)
     const updateOvertoneMult = e => updateFn(e, fm1, setOvertoneMultValue, v => `New overtone mult: ${v}`)
     const updateDelayBoxGain = e => updateFn(e, layer2Out.gain, setDelayBoxGainValue, v => `New delay box gain: ${v}`)
+    const updateLongReverbWet = e => updateFn(e, masterReverbLong.wet, setLongReverbWetValue, v => `New long reverb wet: ${v}`)
     
     const updateFn = (e, audioParam, setter, logFn) => {
         const newVal = e.target.value
@@ -201,6 +208,15 @@ const SynthPad = () => {
                 step='0.1'
                 value={delayBoxGainValue}
                 onChange={updateDelayBoxGain}
+            />
+            <p>Long Reverb: </p>
+            <input
+                type="range"
+                min='0'
+                max='1'
+                step='0.05'
+                value={longReverbWetValue}
+                onChange={updateLongReverbWet}
             />
         </div>
     );
