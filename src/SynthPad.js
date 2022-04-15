@@ -4,14 +4,14 @@ import './SynthPad.css';
 import * as Tone from 'tone'
 import { randint } from './helpers'
 import { getRandomTune } from './music'
-import { addFMOsc, addNoise, addFader } from './constructTones'
+import { addFMOsc, addNoise, addFader, addResonator } from './constructTones'
 
 const UPDATE_PARAM_TIME_S = 0.015
 const INITIAL_VOLUME = 0.10
 const INITIAL_BASE_FREQ_HZ = 120 + 25 * Math.floor(15 * Math.random())
-const INITIAL_TONE_RATIO = 0.20
-const INITIAL_DISTORTION = 0.00
-const INITIAL_OVERTONE_MULT = 1.00
+const INITIAL_TONE_RATIO = 0.15
+const INITIAL_DISTORTION = 1.30
+const INITIAL_OVERTONE_MULT = 2.00
 const INITIAL_DELAY_BOX_GAIN = 1.00
 const TUNE_TIME_S = 5.0
 
@@ -20,6 +20,19 @@ const needStart = n => {nodesToStart.push(n); return n}
 
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
 const oscsOut = new Tone.Gain(1)
+const layer1In = new Tone.Gain(1)
+const layer1Out = new Tone.Gain(1)
+const layer2In = new Tone.Gain(0)
+const layer2Out = new Tone.Gain(0)
+const masterVolumeGain = new Tone.Gain(INITIAL_VOLUME)
+const masterSwitchGain = new Tone.Gain(0)
+oscsOut.connect(layer1In)
+layer1In.connect(layer2In)
+layer2Out.connect(layer1Out)
+layer1In.connect(layer1Out)
+layer1Out.connect(masterVolumeGain)
+masterVolumeGain.connect(masterSwitchGain)
+masterSwitchGain.toDestination()
 
 const { gain: oscg0, distort: d0 } = addFMOsc({ type: 'sine', needStart, output: oscsOut, freq: baseFreqSignal, distortion: true })
 const { gain: oscg1, fm: fm1 } = addFMOsc({ type: 'sawtooth', needStart, output: oscsOut, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
@@ -27,47 +40,16 @@ const { gain: noiseGain } = addNoise({ type: 'white', needStart, output: oscsOut
 const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: oscg1 })
 // const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: noiseGain }) // Working alternative
 
-const layer1In = new Tone.Gain(1)
-const layer1Out = new Tone.Gain(1)
-const layer2In = new Tone.Gain(0)
-const layer2Out = new Tone.Gain(0)
-
-oscsOut.connect(layer1In)
-layer1In.connect(layer2In)
-layer2Out.connect(layer1Out)
-layer1In.connect(layer1Out)
-
-const masterVolumeGain = new Tone.Gain(INITIAL_VOLUME)
-const masterSwitchGain = new Tone.Gain(0)
-layer1Out.connect(masterVolumeGain)
-masterVolumeGain.connect(masterSwitchGain)
-masterSwitchGain.toDestination()
-
-let countDelays = 0
-const addOscillatingResonator = (minResHz, maxResHz, oscPeriodS) => {
-    // Gain of -1, then a delay, gives t = 1 / 2f for delay time t and resonant frequency f
-    // Frequencies f, 3f, 5f... are boosted by 2x
-    // Frequencies 2f, 4f, 6f... are cancelled out
-    const minDelayTimeS = 1 / (2 * maxResHz)
-    const maxDelayTimeS = 1 / (2 * minResHz)
-    const midDelayTimeS = 0.5 * (minDelayTimeS + maxDelayTimeS)
-    const ampDelayTimeS = Math.abs(maxDelayTimeS - midDelayTimeS)
-    console.log(`Delay times: min ${minDelayTimeS}, mid ${midDelayTimeS}, max ${maxDelayTimeS}, ampl ${ampDelayTimeS}`)
-    const delayOsc = needStart(new Tone.Oscillator(1 / oscPeriodS, 'sine'))
-    const delayGainOsc = new Tone.Gain(ampDelayTimeS)
-    const delayNode = new Tone.Delay(1) // max delay time of 1s
-    delayNode.delayTime.value = midDelayTimeS
-    layer2In.connect(delayNode)
-    delayNode.connect(layer2Out)
-    delayOsc.connect(delayGainOsc)
-    delayGainOsc.connect(delayNode.delayTime)
-    countDelays++    
-}
-addOscillatingResonator(17.1, 29.9, 89/10)
-addOscillatingResonator(181, 299, 53/10)
-// addOscillatingResonator(451, 719, 73/10)
-// addOscillatingResonator(637, 1057, 97/10)
-layer2In.gain.value = -1 / countDelays
+// Cancel out any DC using 1 or more Resonators (recommend 2 to 4)
+let countResonators = 0
+const counter = () => countResonators += 1
+const nodeIn = layer2In
+const nodeOut = layer2Out;
+addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 15,  maxHz: 50,  periodS: 127/10 })
+addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 50,  maxHz: 200,  periodS: 113/10 })
+addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 200,  maxHz: 1000,  periodS: 97/10 })
+addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 1000,  maxHz: 22050,  periodS: 79/10 })
+if (countResonators > 0) layer2In.gain.value = -1 / countResonators
 layer2Out.gain.value = INITIAL_DELAY_BOX_GAIN
 
 

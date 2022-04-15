@@ -2,7 +2,7 @@ import * as Tone from 'tone'
 
 // Make a simple oscillator with gain controlled by a signal
 // and frequency controlled by a main signal and a multiplier
-// Optional distortion control
+// Optional custom distortion control (since Tone.Distortion has only fixed distortion)
 export const addFMOsc = ({
     freq, // audioNode to control base frequency of this oscillator
     needStart, // function to add audioNode to list of nodes to start later
@@ -83,4 +83,40 @@ export const addFader = ({
     console.log('addFader ran with result:')
     console.log(result)
     return result
+}
+
+// A resonator doubles gain at f, 3f, 5f...
+// and cancels out gain at 0, 2f, 4f..., hence eliminates all direct current (DC).
+// Resonant frequency f oscillates between min and max values, with specified period
+export const addResonator = ({
+    needStart,
+    nodeIn,
+    nodeOut,
+    counter,
+    minHz,
+    maxHz,
+    periodS
+}) => {
+    // Gain of -1, then a delay, gives t = 1 / 2f for delay time t and resonant frequency f
+    // Frequencies f, 3f, 5f... are boosted by 2x
+    // Frequencies 2f, 4f, 6f... are cancelled out
+    const minDelayTimeS = 1 / (2 * maxHz)
+    const maxDelayTimeS = 1 / (2 * minHz)
+    const midDelayTimeS = 0.5 * (minDelayTimeS + maxDelayTimeS)
+    const ampDelayTimeS = Math.abs(maxDelayTimeS - midDelayTimeS)
+    console.log(`Delay times: min ${minDelayTimeS}, mid ${midDelayTimeS}, max ${maxDelayTimeS}, ampl ${ampDelayTimeS}`)
+    const delayOsc = needStart(new Tone.Oscillator(1 / periodS, 'sine'))
+    const delayGainOsc = new Tone.Gain(ampDelayTimeS)
+    const delayNode = new Tone.Delay(1) // max delay time of 1s
+    delayNode.delayTime.value = midDelayTimeS
+    nodeIn.connect(delayNode)
+    delayNode.connect(nodeOut)
+    delayOsc.connect(delayGainOsc)
+    delayGainOsc.connect(delayNode.delayTime)
+    const result = {
+        newCount: counter()
+    }
+    console.log('addResonator ran with result:')
+    console.log(result)
+    return result     
 }
