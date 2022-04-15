@@ -7,12 +7,13 @@ import { getRandomTune } from './music'
 import { addFMOsc, addNoise, addFader } from './constructTones'
 
 const UPDATE_PARAM_TIME_S = 0.015
-const INITIAL_VOLUME = 0.1
+const INITIAL_VOLUME = 0.10
 const INITIAL_BASE_FREQ_HZ = 120 + 25 * Math.floor(15 * Math.random())
-const INITIAL_TONE_RATIO = 0.2
-const INITIAL_OVERTONE_MULT = 1
-const INITIAL_DELAY_BOX_GAIN = 1
-const TUNE_TIME_S = 5
+const INITIAL_TONE_RATIO = 0.20
+const INITIAL_DISTORTION = 0.00
+const INITIAL_OVERTONE_MULT = 1.00
+const INITIAL_DELAY_BOX_GAIN = 1.00
+const TUNE_TIME_S = 5.0
 
 const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
@@ -20,7 +21,7 @@ const needStart = n => {nodesToStart.push(n); return n}
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
 const oscsOut = new Tone.Gain(1)
 
-const { gain: oscg0, fm: fm0 } = addFMOsc({ type: 'triangle', needStart, output: oscsOut, freq: baseFreqSignal, fm: 1 })
+const { gain: oscg0, distort: d0 } = addFMOsc({ type: 'sine', needStart, output: oscsOut, freq: baseFreqSignal, distortion: true })
 const { gain: oscg1, fm: fm1 } = addFMOsc({ type: 'sawtooth', needStart, output: oscsOut, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
 const { gain: noiseGain } = addNoise({ type: 'white', needStart, output: oscsOut })
 const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: oscg1 })
@@ -77,15 +78,30 @@ const SynthPad = () => {
 
     const [baseFreqValue, setBaseFreqValue] = useState(INITIAL_BASE_FREQ_HZ)
     const [masterVolumeGainValue, setMasterVolumeGainValue] = useState(INITIAL_VOLUME)
+    const [distortionValue, setDistortionValue] = useState(INITIAL_DISTORTION)
     const [toneRatioValue, setToneRatioValue] = useState(INITIAL_TONE_RATIO)
     const [overtoneMultValue, setOvertoneMultValue] = useState(INITIAL_OVERTONE_MULT)
     const [delayBoxGainValue, setDelayBoxGainValue] = useState(INITIAL_DELAY_BOX_GAIN)
-
+    
+    const updateBaseFreq = e => updateFn(e, baseFreqSignal, setBaseFreqValue, v => `New base freq: ${v} Hz`)
+    const updateMasterVolume = e => updateFn(e, masterVolumeGain.gain, setMasterVolumeGainValue, v => `New master volume: ${v}`)
+    const updateDistortion = e => updateFn(e, d0, setDistortionValue, v => `New distortion: ${v}`)
+    const updateToneRatio = e => updateFn(e, fader01, setToneRatioValue, v => `New tone ratio: ${v}`)
+    const updateOvertoneMult = e => updateFn(e, fm1, setOvertoneMultValue, v => `New overtone mult: ${v}`)
+    const updateDelayBoxGain = e => updateFn(e, layer2Out.gain, setDelayBoxGainValue, v => `New delay box gain: ${v}`)
+    
+    const updateFn = (e, audioParam, setter, logFn) => {
+        const newVal = e.target.value
+        audioParam.setTargetAtTime(newVal, Tone.now(), UPDATE_PARAM_TIME_S)
+        setter(newVal)
+        console.log(logFn(newVal))
+    }
+    
     const initialStart = () => {
         console.log(`Starting ${nodesToStart.length} audio nodes...`)
         nodesToStart.forEach(n => n.start())
     }
-
+    
     // Fade in the MasterGainNode gain value to masterGainValue on mouseDown by .001 seconds
     const togglePlay = () => {  
         if (needsInitialStart) {
@@ -100,23 +116,10 @@ const SynthPad = () => {
             setIsPlaying(false)
         }
     }
-
+    
     const rampMainSwitchGain = v => {
         masterSwitchGain.gain.setTargetAtTime(v, Tone.now(), UPDATE_PARAM_TIME_S)
     }
-
-    const updateFn = (e, audioParam, setter, logFn) => {
-        const newVal = e.target.value
-        audioParam.setTargetAtTime(newVal, Tone.now(), UPDATE_PARAM_TIME_S)
-        setter(newVal)
-        console.log(logFn(newVal))
-    }
-
-    const updateBaseFreq = e => updateFn(e, baseFreqSignal, setBaseFreqValue, v => `New base freq: ${v} Hz`)
-    const updateMasterVolume = e => updateFn(e, masterVolumeGain.gain, setMasterVolumeGainValue, v => `New master volume: ${v}`)
-    const updateToneRatio = e => updateFn(e, fader01, setToneRatioValue, v => `New tone ratio: ${v}`)
-    const updateOvertoneMult = e => updateFn(e, fm1, setOvertoneMultValue, v => `New overtone mult: ${v}`)
-    const updateDelayBoxGain = e => updateFn(e, layer2Out.gain, setDelayBoxGainValue, v => `New delay box gain: ${v}`)
 
     const playTune = () => {
         // Cache some values
@@ -180,6 +183,15 @@ const SynthPad = () => {
                 step='0.01'
                 value={masterVolumeGainValue}
                 onChange={updateMasterVolume}
+            />
+            <p>Distortion: </p>
+            <input
+                type="range"
+                min='1'
+                max='10'
+                step='0.1'
+                value={distortionValue}
+                onChange={updateDistortion}
             />
             <p>Tone Ratio: </p>
             <input

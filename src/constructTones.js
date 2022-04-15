@@ -2,23 +2,36 @@ import * as Tone from 'tone'
 
 // Make a simple oscillator with gain controlled by a signal
 // and frequency controlled by a main signal and a multiplier
+// Optional distortion control
 export const addFMOsc = ({
     freq, // audioNode to control base frequency of this oscillator
     needStart, // function to add audioNode to list of nodes to start later
     type = 'sine', // optional, specify type of oscillator
     fm = 1, // optional, initial value of frequency multiplier
-    output = null // optional, where to send the output
+    output = null, // optional, where to send the output
+    distortion = false // if true, adds a distortion control taking values 1 to 10 (or above)
 }) => {
     const freqMultiplierGain = new Tone.Gain(fm)
     const oscNode = needStart(new Tone.Oscillator(0, type))
     const oscGain = new Tone.Gain(0)
     freq.connect(freqMultiplierGain)
     freqMultiplierGain.connect(oscNode.frequency)
-    oscNode.connect(oscGain)
+    let distort = null
+    if (distortion) {
+        const distortGain = new Tone.Gain(1)
+        distort = distortGain.gain
+        const shaper = new Tone.WaveShaper([-1, 1])
+        oscNode.connect(distortGain)
+        distortGain.connect(shaper)
+        shaper.connect(oscGain)
+    } else {
+        oscNode.connect(oscGain)
+    }
     if (output) oscGain.connect(output)
     const result = {
         gain: oscGain.gain,
-        fm: freqMultiplierGain.gain
+        fm: freqMultiplierGain.gain,
+        distort
     }
     console.log('addFMOsc ran with result:')
     console.log(result)
