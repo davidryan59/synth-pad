@@ -1,5 +1,30 @@
 import * as Tone from 'tone'
 
+// Make a simple oscillator with gain controlled by a signal
+// and frequency controlled by a main signal and a multiplier
+export const addFMOsc = ({
+    freq, // audioNode to control base frequency of this oscillator
+    needStart, // function to add audioNode to list of nodes to start later
+    type = 'sine', // optionally specify type of oscillator
+    fm = 1, // optional, initial value of frequency multiplier
+    output = null // optional, where to send the output
+}) => {
+    const oscFMult1 = new Tone.Gain(fm)
+    const oscNode1 = needStart(new Tone.Oscillator(0, type))
+    const oscGain1 = new Tone.Gain(0)
+    freq.connect(oscFMult1)
+    oscFMult1.connect(oscNode1.frequency)
+    oscNode1.connect(oscGain1)
+    if (output) oscGain1.connect(output)
+    const result = {
+        gain: oscGain1.gain,
+        fm: oscFMult1.gain
+    }
+    console.log('addFMOsc ran with result:')
+    console.log(result)
+    return result
+}
+
 // Tone.CrossFade is an equal power fader
 // https://tonejs.github.io/docs/r13/CrossFade
 // Here we manually construct an equal amplitude fader,
