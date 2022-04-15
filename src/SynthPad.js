@@ -4,7 +4,7 @@ import './SynthPad.css';
 import * as Tone from 'tone'
 import { randint } from './helpers'
 import { getRandomTune } from './music'
-import { addFaderSignal } from './constructTones'
+import { addFMOsc, addFader } from './constructTones'
 
 const UPDATE_PARAM_TIME_S = 0.015
 const INITIAL_VOLUME = 0.1
@@ -18,40 +18,18 @@ const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
 
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
+const oscsOut = new Tone.Gain(1)
 
-const oscFMult1 = new Tone.Gain(1)
-const oscNode1 = needStart(new Tone.Oscillator(0, 'triangle'))
-const oscGain1 = new Tone.Gain(0)
-
-const oscFMult2 = new Tone.Gain(INITIAL_OVERTONE_MULT)
-const oscNode2 = needStart(new Tone.Oscillator(0, 'sawtooth'))
-const oscGain2 = new Tone.Gain(0)
-
-const oscGain = new Tone.Gain(1)
-
-baseFreqSignal.connect(oscFMult1)
-baseFreqSignal.connect(oscFMult2)
-oscFMult1.connect(oscNode1.frequency)
-oscFMult2.connect(oscNode2.frequency)
-
-const { faderSignal: toneRatioSignal } = addFaderSignal({
-    value: INITIAL_TONE_RATIO,
-    fade0: oscGain1.gain,
-    fade1: oscGain2.gain,
-})
-console.log(`Tone ratio signal`)
-console.log(toneRatioSignal)
+const { gain: oscg0, fm: fm0 } = addFMOsc({ type: 'triangle', needStart, output: oscsOut, freq: baseFreqSignal, fm: 1 })
+const { gain: oscg1, fm: fm1 } = addFMOsc({ type: 'sawtooth', needStart, output: oscsOut, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
+const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: oscg1 })
 
 const layer1In = new Tone.Gain(1)
 const layer1Out = new Tone.Gain(1)
 const layer2In = new Tone.Gain(0)
 const layer2Out = new Tone.Gain(0)
 
-oscNode1.connect(oscGain1)
-oscNode2.connect(oscGain2)
-oscGain1.connect(oscGain)
-oscGain2.connect(oscGain)
-oscGain.connect(layer1In)
+oscsOut.connect(layer1In)
 layer1In.connect(layer2In)
 layer2Out.connect(layer1Out)
 layer1In.connect(layer1Out)
@@ -134,8 +112,8 @@ const SynthPad = () => {
 
     const updateBaseFreq = e => updateFn(e, baseFreqSignal, setBaseFreqValue, v => `New base freq: ${v} Hz`)
     const updateMasterVolume = e => updateFn(e, masterVolumeGain.gain, setMasterVolumeGainValue, v => `New master volume: ${v}`)
-    const updateToneRatio = e => updateFn(e, toneRatioSignal, setToneRatioValue, v => `New tone ratio: ${v}`)
-    const updateOvertoneMult = e => updateFn(e, oscFMult2.gain, setOvertoneMultValue, v => `New overtone mult: ${v}`)
+    const updateToneRatio = e => updateFn(e, fader01, setToneRatioValue, v => `New tone ratio: ${v}`)
+    const updateOvertoneMult = e => updateFn(e, fm1, setOvertoneMultValue, v => `New overtone mult: ${v}`)
     const updateDelayBoxGain = e => updateFn(e, layer2Out.gain, setDelayBoxGainValue, v => `New delay box gain: ${v}`)
 
     const playTune = () => {

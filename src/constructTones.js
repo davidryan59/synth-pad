@@ -30,7 +30,7 @@ export const addFMOsc = ({
 // Here we manually construct an equal amplitude fader,
 // which is more suitable for highly correlated audio
 // such as mixing two oscillators with the same frequency
-export const addFaderSignal = ({
+export const addFader = ({
     value, // numeric
     fade0, // AudioParam
     fade1 // AudioParam
@@ -47,9 +47,9 @@ export const addFaderSignal = ({
     faderSubtract.connect(fade0) // 1 - value
     faderSignal.connect(fade1)   // value
     const result = {
-        faderSignal
+        fader: faderSignal
     }
-    console.log('addFaderSignal ran with result:')
+    console.log('addFader ran with result:')
     console.log(result)
     return result
 }
