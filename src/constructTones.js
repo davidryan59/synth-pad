@@ -1,6 +1,7 @@
 export const constructTones = ({
     Tone,
-    needStart
+    needStart,
+    logger
 }) => {
     const ct = {}
 
@@ -25,8 +26,8 @@ export const constructTones = ({
             output: oscNode,
             fm: freqMultiplierGain.gain
         }
-        console.log('addOsc ran with result:')
-        console.log(result)
+        logger('addOsc ran with result:')
+        logger(result)
         return result
     }
 
@@ -57,8 +58,8 @@ export const constructTones = ({
             output: outputGain,
             fader: fader
         }
-        console.log('addFader ran with result:')
-        console.log(result)
+        logger('addFader ran with result:')
+        logger(result)
         return result
     }
 
@@ -80,7 +81,7 @@ export const constructTones = ({
         const maxDelayTimeS = 1 / (2 * minHz)
         const midDelayTimeS = 0.5 * (minDelayTimeS + maxDelayTimeS)
         const ampDelayTimeS = Math.abs(maxDelayTimeS - midDelayTimeS)
-        console.log(`Delay times: min ${minDelayTimeS}, mid ${midDelayTimeS}, max ${maxDelayTimeS}, ampl ${ampDelayTimeS}`)
+        logger(`Delay times: min ${minDelayTimeS}, mid ${midDelayTimeS}, max ${maxDelayTimeS}, ampl ${ampDelayTimeS}`)
         const delayOsc = needStart(new Tone.Oscillator(1 / periodS, 'sine'))
         const delayGainOsc = new Tone.Gain(ampDelayTimeS)
         const delayNode = new Tone.Delay(1) // max delay time of 1s
@@ -92,8 +93,8 @@ export const constructTones = ({
         const result = {
             newCount: counter()
         }
-        console.log('addResonator ran with result:')
-        console.log(result)
+        logger('addResonator ran with result:')
+        logger(result)
         return result     
     }
 
@@ -126,8 +127,8 @@ export const constructTones = ({
             output: layer1Out,
             wet: layer2Out.gain
         }
-        console.log('addResonators ran with result:')
-        console.log(result)
+        logger('addResonators ran with result:')
+        logger(result)
         return result
     }
 
@@ -140,7 +141,6 @@ export const constructTones = ({
         const masterReverbLong = new Tone.Reverb(reverbTimeS)
         masterReverbLong.wet.value = reverbWet
         const masterSwitchGain = new Tone.Gain(0)
-        // resOutput.connect(masterVolumeGain)
         masterVolumeGain.connect(masterReverbLong)
         masterReverbLong.connect(masterSwitchGain)
         masterSwitchGain.toDestination()
@@ -150,12 +150,13 @@ export const constructTones = ({
             switch: masterSwitchGain.gain,
             reverb: masterReverbLong.wet
         }
-        console.log('addMasterBox ran with result:')
-        console.log(result)
+        logger('addMasterBox ran with result:')
+        logger(result)
         return result    
     }
 
-    console.log(ct)
+    logger('constructTones ran with result:')
+    logger(ct)
     return ct
 }
 

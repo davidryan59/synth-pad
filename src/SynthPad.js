@@ -1,4 +1,3 @@
-// import React, { useState, useEffect } from 'react';
 import React, { useState } from 'react'
 import './SynthPad.css';
 import * as Tone from 'tone'
@@ -19,9 +18,11 @@ const TUNE_TIME_S = 5.0
 
 const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
+const logger = txt => console.log(txt)
 const ct = constructTones({
     Tone,
-    needStart
+    needStart,
+    logger
 })
 
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
@@ -69,18 +70,17 @@ const SynthPad = () => {
     
     const updateFn = (e, toneParam, reactSetter, logFn) => {
         const newVal = e.target.value
-        console.log(toneParam)
+        logger(toneParam)
         toneParam.setTargetAtTime(newVal, Tone.now(), UPDATE_PARAM_TIME_S)
         reactSetter(newVal)
-        console.log(logFn(newVal))
+        logger(logFn(newVal))
     }
     
     const initialStart = () => {
-        console.log(`Starting ${nodesToStart.length} audio nodes...`)
+        logger(`Starting ${nodesToStart.length} audio nodes...`)
         nodesToStart.forEach(n => n.start())
     }
     
-    // Fade in the MasterGainNode gain value to masterGainValue on mouseDown by .001 seconds
     const togglePlay = () => {  
         if (needsInitialStart) {
             initialStart()
@@ -103,17 +103,18 @@ const SynthPad = () => {
         // Cache some values
         const timeNowS = Tone.now()
         const baseFreqHz = baseFreqValue
-        console.log(timeNowS, baseFreqHz)
+        logger(timeNowS, baseFreqHz)
         // Get a tune
         const tune = getRandomTune({
-            size: randint(12, 20),
-            minNum: 8,
-            maxNum: 12,
-            minDenom: 3,
-            maxDenom: 4,
+            tuneLength: randint(12, 20),
+            minNum: 3,
+            maxNum: 7,
+            minDenom: 10,
+            maxDenom: 11,
             maxStep: 1,
             minBeats: 1,
-            maxBeats: 2
+            maxBeats: 2,
+            logger
         })
         const beatTimeS = TUNE_TIME_S / tune.totalBeats
         // Play a tune
@@ -122,15 +123,12 @@ const SynthPad = () => {
         let thisS = timeNowS + beatSum * beatTimeS
         tune.notes.forEach(note => {
             const thisFreqHz = baseFreqHz * (note.freqNum / note.freqDenom) / tune.fMult
-            // const thisS = timeNowS + beatSum * beatTimeS
-            baseFreqSignal.setValueAtTime(thisFreqHz, thisS)
-            // baseFreqSignal.setTargetAtTime(thisFreqHz, thisS, 0.2) // Alternative
+            baseFreqSignal.setTargetAtTime(thisFreqHz, thisS, 0.001)
             const noiseGain = 0.2
             const noiseOnsetTimeS = 0.0001
             const noiseLengthS = 0.05
             faderNoise.setTargetAtTime(noiseGain, thisS, noiseOnsetTimeS)
             faderNoise.setTargetAtTime(0, thisS + noiseOnsetTimeS, noiseLengthS)
-
             const noteOnsetTimeS = 0.01
             const noteSustainTimeS = 0.02
             const holdGain = 0.7
@@ -141,12 +139,11 @@ const SynthPad = () => {
             displayFreqs.push(Math.floor(thisFreqHz * 100) / 100)
             thisS = timeNowS + beatSum * beatTimeS
         })
-        // Reset to original frequency
-        // const thisS = timeNowS + beatSum * beatTimeS
+        // Reset to original parameters
         baseFreqSignal.setValueAtTime(baseFreqHz, thisS)
         faderNoise.setTargetAtTime(0, thisS, 2)
         oscGain.gain.setTargetAtTime(1, thisS, 2)
-        console.log(displayFreqs)
+        logger(displayFreqs)
     }
 
     return (
