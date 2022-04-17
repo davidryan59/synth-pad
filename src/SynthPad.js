@@ -34,13 +34,12 @@ const { output: oscs, fader: faderNoise } = ct.addFader({ input0: osc01, input1:
 const oscGain = new Tone.Gain(1)
 oscs.connect(oscGain)
 
-const data = [
+const { input: resInput, output: resOutput, wet: resWet } = ct.addResonators({ data: [
     { minHz: 15,  maxHz: 50,  periodS: 127/10 },
     { minHz: 50,  maxHz: 200,  periodS: 113/10 },
     { minHz: 200,  maxHz: 1000,  periodS: 97/10 },
     { minHz: 1000,  maxHz: 22050,  periodS: 79/10 }
-]
-const { input: resInput, output: resOutput, wet: resWet } = ct.addResonators({ data })
+]})
 oscGain.connect(resInput)
 
 const { input: mstrIn, gain: mstrGn, switch: mstrSw, reverb: mstrRv } = ct.addMasterBox({ initVol: INITIAL_VOLUME, reverbTimeS: LONG_REVERB_TIME_S, reverbWet: LONG_REVERB_WET })
