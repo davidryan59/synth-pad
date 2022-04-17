@@ -4,7 +4,8 @@ import './SynthPad.css';
 import * as Tone from 'tone'
 import { randint } from './helpers'
 import { getRandomTune } from './music'
-import { addOsc, addNoise, addFader, addResonators, addMasterBox } from './constructTones'
+import { constructTones } from './constructTones'
+
 
 const UPDATE_PARAM_TIME_S = 0.015
 const INITIAL_VOLUME = 0.10
@@ -18,14 +19,17 @@ const TUNE_TIME_S = 5.0
 
 const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
+const ct = constructTones({
+    Tone,
+    needStart
+})
 
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
 
-const { output: osc0 } = addOsc({ type: 'triangle', needStart, freq: baseFreqSignal })
-const { output: osc1, fm: fm1 } = addOsc({ type: 'sawtooth', needStart, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
-const { output: noise } = addNoise({ type: 'white', needStart })
-const { output: osc01, fader: faderTone } = addFader({ input0: osc0, input1: osc1, value: INITIAL_TONE_RATIO })
-const { output: oscs, fader: faderNoise } = addFader({ input0: osc01, input1: noise, value: INITIAL_NOISE_RATIO })
+const { output: osc0 } = ct.addOsc({ type: 'triangle', freq: baseFreqSignal })
+const { output: osc1, fm: fm1 } = ct.addOsc({ type: 'sawtooth', freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
+const { output: osc01, fader: faderTone } = ct.addFader({ input0: osc0, input1: osc1, value: INITIAL_TONE_RATIO })
+const { output: oscs, fader: faderNoise } = ct.addFader({ input0: osc01, input1: ct.whiteNoise, value: INITIAL_NOISE_RATIO })
 const oscGain = new Tone.Gain(1)
 oscs.connect(oscGain)
 
@@ -35,10 +39,10 @@ const data = [
     { minHz: 200,  maxHz: 1000,  periodS: 97/10 },
     { minHz: 1000,  maxHz: 22050,  periodS: 79/10 }
 ]
-const { input: resInput, output: resOutput, wet: resWet } = addResonators({ data, needStart })
+const { input: resInput, output: resOutput, wet: resWet } = ct.addResonators({ data })
 oscGain.connect(resInput)
 
-const { input: mstrIn, gain: mstrGn, switch: mstrSw, reverb: mstrRv } = addMasterBox({ initVol: INITIAL_VOLUME, reverbTimeS: LONG_REVERB_TIME_S, reverbWet: LONG_REVERB_WET })
+const { input: mstrIn, gain: mstrGn, switch: mstrSw, reverb: mstrRv } = ct.addMasterBox({ initVol: INITIAL_VOLUME, reverbTimeS: LONG_REVERB_TIME_S, reverbWet: LONG_REVERB_WET })
 resOutput.connect(mstrIn)
 
 
@@ -63,11 +67,11 @@ const SynthPad = () => {
     const updateResonatorsGain = e => updateFn(e, resWet, setResonatorsGainValue, v => `New resonators gain: ${v}`)
     const updateLongReverbWet = e => updateFn(e, mstrRv, setLongReverbWetValue, v => `New long reverb wet: ${v}`)
     
-    const updateFn = (e, audioParam, setter, logFn) => {
+    const updateFn = (e, toneParam, reactSetter, logFn) => {
         const newVal = e.target.value
-        console.log(audioParam)
-        audioParam.setTargetAtTime(newVal, Tone.now(), UPDATE_PARAM_TIME_S)
-        setter(newVal)
+        console.log(toneParam)
+        toneParam.setTargetAtTime(newVal, Tone.now(), UPDATE_PARAM_TIME_S)
+        reactSetter(newVal)
         console.log(logFn(newVal))
     }
     
