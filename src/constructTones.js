@@ -2,38 +2,21 @@ import * as Tone from 'tone'
 
 // Make a simple oscillator with gain controlled by a signal
 // and frequency controlled by a main signal and a multiplier
-// Optional custom distortion control (since Tone.Distortion has only fixed distortion)
-export const addFMOsc = ({
+export const addOsc = ({
     freq, // audioNode to control base frequency of this oscillator
     needStart, // function to add audioNode to list of nodes to start later
     type = 'sine', // optional, specify type of oscillator
-    fm = 1, // optional, initial value of frequency multiplier
-    output = null, // optional, where to send the output
-    distortion = false // if true, adds a distortion control taking values 1 to 10 (or above)
+    fm = 1 // optional, initial value of frequency multiplier
 }) => {
     const freqMultiplierGain = new Tone.Gain(fm)
     const oscNode = needStart(new Tone.Oscillator(0, type))
-    const oscGain = new Tone.Gain(0)
     freq.connect(freqMultiplierGain)
     freqMultiplierGain.connect(oscNode.frequency)
-    let distort = null
-    if (distortion) {
-        const distortGain = new Tone.Gain(1)
-        distort = distortGain.gain
-        const shaper = new Tone.WaveShaper([-1, 1])
-        oscNode.connect(distortGain)
-        distortGain.connect(shaper)
-        shaper.connect(oscGain)
-    } else {
-        oscNode.connect(oscGain)
-    }
-    if (output) oscGain.connect(output)
     const result = {
-        gain: oscGain.gain,
-        fm: freqMultiplierGain.gain,
-        distort
+        output: oscNode,
+        fm: freqMultiplierGain.gain
     }
-    console.log('addFMOsc ran with result:')
+    console.log('addOsc ran with result:')
     console.log(result)
     return result
 }
@@ -41,15 +24,11 @@ export const addFMOsc = ({
 // Make a noise generator with gain control
 export const addNoise = ({
     needStart, // function to add audioNode to list of nodes to start later
-    type = 'white', // optional, specify type of noise
-    output = null // optional, where to send the output
+    type = 'white' // optional, specify type of noise
 }) => {
     const noiseNode = needStart(new Tone.Noise(type))
-    const noiseGain = new Tone.Gain(0)
-    noiseNode.connect(noiseGain)
-    if (output) noiseGain.connect(output)
     const result = {
-        gain: noiseGain.gain
+        output: noiseNode
     }
     console.log('addNoise ran with result:')
     console.log(result)
@@ -62,23 +41,28 @@ export const addNoise = ({
 // which is more suitable for highly correlated audio
 // such as mixing two oscillators with the same frequency
 export const addFader = ({
-    value, // numeric
-    fade0, // AudioParam
-    fade1 // AudioParam
+    input0,
+    input1,
+    value, // optional, numeric initial value
+    const1Signal, // optional, provide signal that is always equal to 1
 }) => {
-    const const1Signal = new Tone.Signal(1)
-    const faderSubtract = new Tone.Subtract(0)
-    const faderSignal = new Tone.Signal({
-        value,
-        minValue: 0,
-        maxValue: 1
-    })
-    const1Signal.connect(faderSubtract)
-    faderSignal.connect(faderSubtract.subtrahend)
-    faderSubtract.connect(fade0) // 1 - value
-    faderSignal.connect(fade1)   // value
+    let s1 = const1Signal ? const1Signal : new Tone.Signal(1)
+    const fader = new Tone.Signal({ value: value || 0, minValue: 0, maxValue: 1 })
+    const subtractor = new Tone.Subtract(0)
+    const inputGain0 = new Tone.Gain(0)
+    const inputGain1 = new Tone.Gain(0)
+    const outputGain = new Tone.Gain(1)
+    s1.connect(subtractor)
+    fader.connect(subtractor.subtrahend)
+    subtractor.connect(inputGain0.gain) // 1 - value
+    fader.connect(inputGain1.gain)   // value
+    input0.connect(inputGain0)
+    input1.connect(inputGain1)
+    inputGain0.connect(outputGain)
+    inputGain1.connect(outputGain)
     const result = {
-        fader: faderSignal
+        output: outputGain,
+        fader: fader
     }
     console.log('addFader ran with result:')
     console.log(result)
@@ -88,7 +72,7 @@ export const addFader = ({
 // A resonator doubles gain at f, 3f, 5f...
 // and cancels out gain at 0, 2f, 4f..., hence eliminates all direct current (DC).
 // Resonant frequency f oscillates between min and max values, with specified period
-export const addResonator = ({
+const addResonator = ({
     needStart,
     nodeIn,
     nodeOut,
@@ -119,4 +103,56 @@ export const addResonator = ({
     console.log('addResonator ran with result:')
     console.log(result)
     return result     
+}
+
+// Cancel out any DC using 1 or more Resonators (recommend 2 to 4)
+export const addResonators = ({
+    needStart,
+    data
+}) => {
+    const layer1In = new Tone.Gain(1)
+    const layer1Out = new Tone.Gain(1)
+    const layer2In = new Tone.Gain(0)
+    const layer2Out = new Tone.Gain(1)
+    layer1In.connect(layer2In)
+    layer2Out.connect(layer1Out)
+    layer1In.connect(layer1Out)
+    let countResonators = 0
+    const counter = () => countResonators += 1
+    const nodeIn = layer2In
+    const nodeOut = layer2Out;
+    data.forEach(item => addResonator({ needStart, counter, nodeIn, nodeOut, minHz: item.minHz, maxHz: item.maxHz, periodS: item.periodS }))
+    if (countResonators > 0) layer2In.gain.value = -1 / countResonators
+    const result = {
+        input: layer1In,
+        output: layer1Out,
+        wet: layer2Out.gain
+    }
+    console.log('addResonators ran with result:')
+    console.log(result)
+    return result
+}
+
+export const addMasterBox = ({
+    initVol,
+    reverbTimeS,
+    reverbWet
+}) => {
+    const masterVolumeGain = new Tone.Gain(initVol)
+    const masterReverbLong = new Tone.Reverb(reverbTimeS)
+    masterReverbLong.wet.value = reverbWet
+    const masterSwitchGain = new Tone.Gain(0)
+    // resOutput.connect(masterVolumeGain)
+    masterVolumeGain.connect(masterReverbLong)
+    masterReverbLong.connect(masterSwitchGain)
+    masterSwitchGain.toDestination()
+    const result = {
+        input: masterVolumeGain,
+        gain: masterVolumeGain.gain,
+        switch: masterSwitchGain.gain,
+        reverb: masterReverbLong.wet
+    }
+    console.log('addMasterBox ran with result:')
+    console.log(result)
+    return result    
 }

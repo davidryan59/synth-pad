@@ -4,16 +4,14 @@ import './SynthPad.css';
 import * as Tone from 'tone'
 import { randint } from './helpers'
 import { getRandomTune } from './music'
-import { addFMOsc, addNoise, addFader, addResonator } from './constructTones'
+import { addOsc, addNoise, addFader, addResonators, addMasterBox } from './constructTones'
 
 const UPDATE_PARAM_TIME_S = 0.015
 const INITIAL_VOLUME = 0.10
 const INITIAL_BASE_FREQ_HZ = 120 + 25 * Math.floor(15 * Math.random())
 const INITIAL_NOISE_RATIO = 0.01
 const INITIAL_TONE_RATIO = 0.15
-const INITIAL_DISTORTION = 1.30
 const INITIAL_OVERTONE_MULT = 2.00
-const INITIAL_DELAY_BOX_GAIN = 1.00
 const LONG_REVERB_TIME_S = 2
 const LONG_REVERB_WET = 0.2
 const TUNE_TIME_S = 5.0
@@ -22,43 +20,26 @@ const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
 
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
-const oscsGain = new Tone.Gain(0) // Combine osc0 and osc1, gain controlled by faderN
-const oscNoiseGain = new Tone.Gain(1) // Combine oscsGain and noise
-const layer1In = new Tone.Gain(1)
-const layer1Out = new Tone.Gain(1)
-const layer2In = new Tone.Gain(0)
-const layer2Out = new Tone.Gain(0)
-const masterVolumeGain = new Tone.Gain(INITIAL_VOLUME)
-const masterReverbLong = new Tone.Reverb(LONG_REVERB_TIME_S)
-masterReverbLong.wet.value = LONG_REVERB_WET
-const masterSwitchGain = new Tone.Gain(0)
-oscsGain.connect(oscNoiseGain)
-oscNoiseGain.connect(layer1In)
-layer1In.connect(layer2In)
-layer2Out.connect(layer1Out)
-layer1In.connect(layer1Out)
-layer1Out.connect(masterVolumeGain)
-masterVolumeGain.connect(masterReverbLong)
-masterReverbLong.connect(masterSwitchGain)
-masterSwitchGain.toDestination()
 
-const { gain: oscg0, distort: d0 } = addFMOsc({ type: 'sine', needStart, output: oscsGain, freq: baseFreqSignal, distortion: true })
-const { gain: oscg1, fm: fm1 } = addFMOsc({ type: 'sawtooth', needStart, output: oscsGain, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
-const { gain: noiseGain } = addNoise({ type: 'white', needStart, output: oscNoiseGain })
-const { fader: fader01 } = addFader({ value: INITIAL_TONE_RATIO, fade0: oscg0, fade1: oscg1 })
-const { fader: faderN } = addFader({ value: INITIAL_NOISE_RATIO, fade0: oscsGain.gain, fade1: noiseGain })
+const { output: osc0 } = addOsc({ type: 'triangle', needStart, freq: baseFreqSignal })
+const { output: osc1, fm: fm1 } = addOsc({ type: 'sawtooth', needStart, freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
+const { output: noise } = addNoise({ type: 'white', needStart })
+const { output: osc01, fader: faderTone } = addFader({ input0: osc0, input1: osc1, value: INITIAL_TONE_RATIO })
+const { output: oscs, fader: faderNoise } = addFader({ input0: osc01, input1: noise, value: INITIAL_NOISE_RATIO })
+const oscGain = new Tone.Gain(1)
+oscs.connect(oscGain)
 
-// Cancel out any DC using 1 or more Resonators (recommend 2 to 4)
-let countResonators = 0
-const counter = () => countResonators += 1
-const nodeIn = layer2In
-const nodeOut = layer2Out;
-addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 15,  maxHz: 50,  periodS: 127/10 })
-addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 50,  maxHz: 200,  periodS: 113/10 })
-addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 200,  maxHz: 1000,  periodS: 97/10 })
-addResonator({ needStart, counter, nodeIn, nodeOut, minHz: 1000,  maxHz: 22050,  periodS: 79/10 })
-if (countResonators > 0) layer2In.gain.value = -1 / countResonators
-layer2Out.gain.value = INITIAL_DELAY_BOX_GAIN
+const data = [
+    { minHz: 15,  maxHz: 50,  periodS: 127/10 },
+    { minHz: 50,  maxHz: 200,  periodS: 113/10 },
+    { minHz: 200,  maxHz: 1000,  periodS: 97/10 },
+    { minHz: 1000,  maxHz: 22050,  periodS: 79/10 }
+]
+const { input: resInput, output: resOutput, wet: resWet } = addResonators({ data, needStart })
+oscGain.connect(resInput)
+
+const { input: mstrIn, gain: mstrGn, switch: mstrSw, reverb: mstrRv } = addMasterBox({ initVol: INITIAL_VOLUME, reverbTimeS: LONG_REVERB_TIME_S, reverbWet: LONG_REVERB_WET })
+resOutput.connect(mstrIn)
 
 
 const SynthPad = () => {
@@ -68,24 +49,23 @@ const SynthPad = () => {
 
     const [baseFreqValue, setBaseFreqValue] = useState(INITIAL_BASE_FREQ_HZ)
     const [masterVolumeGainValue, setMasterVolumeGainValue] = useState(INITIAL_VOLUME)
-    const [distortionValue, setDistortionValue] = useState(INITIAL_DISTORTION)
     const [noiseRatioValue, setNoiseRatioValue] = useState(INITIAL_NOISE_RATIO)
     const [toneRatioValue, setToneRatioValue] = useState(INITIAL_TONE_RATIO)
     const [overtoneMultValue, setOvertoneMultValue] = useState(INITIAL_OVERTONE_MULT)
-    const [delayBoxGainValue, setDelayBoxGainValue] = useState(INITIAL_DELAY_BOX_GAIN)
+    const [resonatorsGainValue, setResonatorsGainValue] = useState(1)
     const [longReverbWetValue, setLongReverbWetValue] = useState(LONG_REVERB_WET)
     
     const updateBaseFreq = e => updateFn(e, baseFreqSignal, setBaseFreqValue, v => `New base freq: ${v} Hz`)
-    const updateMasterVolume = e => updateFn(e, masterVolumeGain.gain, setMasterVolumeGainValue, v => `New master volume: ${v}`)
-    const updateDistortion = e => updateFn(e, d0, setDistortionValue, v => `New distortion: ${v}`)
-    const updateNoiseRatio = e => updateFn(e, faderN, setNoiseRatioValue, v => `New noise ratio: ${v}`)
-    const updateToneRatio = e => updateFn(e, fader01, setToneRatioValue, v => `New tone ratio: ${v}`)
+    const updateMasterVolume = e => updateFn(e, mstrGn, setMasterVolumeGainValue, v => `New master volume: ${v}`)
+    const updateNoiseRatio = e => updateFn(e, faderNoise, setNoiseRatioValue, v => `New noise ratio: ${v}`)
+    const updateToneRatio = e => updateFn(e, faderTone, setToneRatioValue, v => `New tone ratio: ${v}`)
     const updateOvertoneMult = e => updateFn(e, fm1, setOvertoneMultValue, v => `New overtone mult: ${v}`)
-    const updateDelayBoxGain = e => updateFn(e, layer2Out.gain, setDelayBoxGainValue, v => `New delay box gain: ${v}`)
-    const updateLongReverbWet = e => updateFn(e, masterReverbLong.wet, setLongReverbWetValue, v => `New long reverb wet: ${v}`)
+    const updateResonatorsGain = e => updateFn(e, resWet, setResonatorsGainValue, v => `New resonators gain: ${v}`)
+    const updateLongReverbWet = e => updateFn(e, mstrRv, setLongReverbWetValue, v => `New long reverb wet: ${v}`)
     
     const updateFn = (e, audioParam, setter, logFn) => {
         const newVal = e.target.value
+        console.log(audioParam)
         audioParam.setTargetAtTime(newVal, Tone.now(), UPDATE_PARAM_TIME_S)
         setter(newVal)
         console.log(logFn(newVal))
@@ -112,7 +92,7 @@ const SynthPad = () => {
     }
     
     const rampMainSwitchGain = v => {
-        masterSwitchGain.gain.setTargetAtTime(v, Tone.now(), UPDATE_PARAM_TIME_S)
+        mstrSw.setTargetAtTime(v, Tone.now(), UPDATE_PARAM_TIME_S)
     }
 
     const playTune = () => {
@@ -135,14 +115,33 @@ const SynthPad = () => {
         // Play a tune
         const displayFreqs = []
         let beatSum = 0
+        let thisS = timeNowS + beatSum * beatTimeS
         tune.notes.forEach(note => {
             const thisFreqHz = baseFreqHz * (note.freqNum / note.freqDenom) / tune.fMult
-            baseFreqSignal.setValueAtTime(thisFreqHz, timeNowS + beatSum * beatTimeS)
+            // const thisS = timeNowS + beatSum * beatTimeS
+            baseFreqSignal.setValueAtTime(thisFreqHz, thisS)
+            // baseFreqSignal.setTargetAtTime(thisFreqHz, thisS, 0.2) // Alternative
+            const noiseGain = 0.2
+            const noiseOnsetTimeS = 0.0001
+            const noiseLengthS = 0.05
+            faderNoise.setTargetAtTime(noiseGain, thisS, noiseOnsetTimeS)
+            faderNoise.setTargetAtTime(0, thisS + noiseOnsetTimeS, noiseLengthS)
+
+            const noteOnsetTimeS = 0.01
+            const noteSustainTimeS = 0.02
+            const holdGain = 0.7
+            const noteLengthS = 1
+            oscGain.gain.setTargetAtTime(1, thisS, noteOnsetTimeS)
+            oscGain.gain.setTargetAtTime(holdGain, thisS + noteOnsetTimeS + noteSustainTimeS, noteLengthS)
             beatSum += note.beats
             displayFreqs.push(Math.floor(thisFreqHz * 100) / 100)
+            thisS = timeNowS + beatSum * beatTimeS
         })
         // Reset to original frequency
-        baseFreqSignal.setValueAtTime(baseFreqHz, timeNowS + beatSum * beatTimeS)
+        // const thisS = timeNowS + beatSum * beatTimeS
+        baseFreqSignal.setValueAtTime(baseFreqHz, thisS)
+        faderNoise.setTargetAtTime(0, thisS, 2)
+        oscGain.gain.setTargetAtTime(1, thisS, 2)
         console.log(displayFreqs)
     }
 
@@ -178,15 +177,6 @@ const SynthPad = () => {
                 value={masterVolumeGainValue}
                 onChange={updateMasterVolume}
             />
-            <p>Distortion: </p>
-            <input
-                type="range"
-                min='1'
-                max='10'
-                step='0.1'
-                value={distortionValue}
-                onChange={updateDistortion}
-            />
             <p>Noise Ratio: </p>
             <input
                 type="range"
@@ -214,14 +204,14 @@ const SynthPad = () => {
                 value={overtoneMultValue}
                 onChange={updateOvertoneMult}
             />
-            <p>Delay Box Gain: </p>
+            <p>Resonators Gain: </p>
             <input
                 type="range"
                 min='0'
                 max='1'
                 step='0.1'
-                value={delayBoxGainValue}
-                onChange={updateDelayBoxGain}
+                value={resonatorsGainValue}
+                onChange={updateResonatorsGain}
             />
             <p>Long Reverb: </p>
             <input
