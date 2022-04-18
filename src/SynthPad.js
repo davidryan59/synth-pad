@@ -3,11 +3,12 @@ import './SynthPad.css';
 import * as Tone from 'tone'
 import { randint } from './helpers'
 import { getRandomTune } from './music'
+import { noiseData } from './noiseData'
 import { constructTones } from './constructTones'
 
 
 const UPDATE_SLIDER_TIME_S = 0.005
-const INITIAL_VOLUME = 0.10
+const INITIAL_VOLUME = 0.20
 const INITIAL_BASE_FREQ_HZ = 120 + 25 * Math.floor(15 * Math.random())
 const INITIAL_RATIO_SINE_TRI = 0.5
 const INITIAL_RATIO_SQ_SAW = 0.5
@@ -17,6 +18,10 @@ const INITIAL_SAW_OVERTONE_MULT = 2
 const REVERB_TIME_S = 2
 const REVERB_WET = 0.2
 const TUNE_TIME_S = 5.0
+
+let noiseIdx = 0
+const getNextNoiseItem = () => {noiseIdx = (noiseIdx + 1) % noiseData.length; return noiseData[noiseIdx]}
+// const getNextNoiseItem = () => noiseData[randint(0, noiseData.length - 1)]
 
 const nodesToStart = []
 const needStart = n => {nodesToStart.push(n); return n}
@@ -133,11 +138,9 @@ const SynthPad = () => {
         tune.notes.forEach(note => {
             const thisFreqHz = baseFreqHz * (note.freqNum / note.freqDenom) / tune.fMult
             baseFreqSignal.setTargetAtTime(thisFreqHz, thisS, 0.001)
-            const noiseGain = 0.2
-            const noiseOnsetTimeS = 0.0001
-            const noiseLengthS = 0.05
-            faderNoise.setTargetAtTime(noiseGain, thisS, noiseOnsetTimeS)
-            faderNoise.setTargetAtTime(0, thisS + noiseOnsetTimeS, noiseLengthS)
+            const ni = getNextNoiseItem()
+            faderNoise.setTargetAtTime(ni.maxNoiseRatio, thisS, ni.attackS)
+            faderNoise.setTargetAtTime(0, thisS + ni.attackS + ni.sustainS, ni.releaseS)
             const noteOnsetTimeS = 0.01
             const noteSustainTimeS = 0.02
             const holdGain = 0.7
