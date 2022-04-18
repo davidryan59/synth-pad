@@ -6,14 +6,16 @@ import { getRandomTune } from './music'
 import { constructTones } from './constructTones'
 
 
-const UPDATE_PARAM_TIME_S = 0.015
+const UPDATE_SLIDER_TIME_S = 0.005
 const INITIAL_VOLUME = 0.10
 const INITIAL_BASE_FREQ_HZ = 120 + 25 * Math.floor(15 * Math.random())
-const INITIAL_NOISE_RATIO = 0.01
-const INITIAL_TONE_RATIO = 0.15
-const INITIAL_OVERTONE_MULT = 2.00
-const LONG_REVERB_TIME_S = 2
-const LONG_REVERB_WET = 0.2
+const INITIAL_RATIO_SINE_TRI = 0.5
+const INITIAL_RATIO_SQ_SAW = 0.5
+const INITIAL_RATIO_STRIDENCY = 0.1
+const INITIAL_RATIO_NOISE = 0
+const INITIAL_SAW_OVERTONE_MULT = 2
+const REVERB_TIME_S = 2
+const REVERB_WET = 0.2
 const TUNE_TIME_S = 5.0
 
 const nodesToStart = []
@@ -27,10 +29,14 @@ const ct = constructTones({
 
 const baseFreqSignal = new Tone.Signal(INITIAL_BASE_FREQ_HZ)
 
-const { output: osc0 } = ct.addOsc({ type: 'triangle', freq: baseFreqSignal })
-const { output: osc1, fm: fm1 } = ct.addOsc({ type: 'sawtooth', freq: baseFreqSignal, fm: INITIAL_OVERTONE_MULT })
-const { output: osc01, fader: faderTone } = ct.addFader({ input0: osc0, input1: osc1, value: INITIAL_TONE_RATIO })
-const { output: oscs, fader: faderNoise } = ct.addFader({ input0: osc01, input1: ct.whiteNoise, value: INITIAL_NOISE_RATIO })
+const { output: oscSine } = ct.addOsc({ type: 'sine', freq: baseFreqSignal })
+const { output: oscTri } = ct.addOsc({ type: 'triangle', freq: baseFreqSignal })
+const { output: oscSq } = ct.addOsc({ type: 'square', freq: baseFreqSignal })
+const { output: oscSaw, fm: fmSaw } = ct.addOsc({ type: 'sawtooth', freq: baseFreqSignal, fm: INITIAL_SAW_OVERTONE_MULT })
+const { output: oscSineTri, fader: faderSineTri } = ct.addFader({ input0: oscSine, input1: oscTri, value: INITIAL_RATIO_SINE_TRI })
+const { output: oscSqSaw, fader: faderSqSaw } = ct.addFader({ input0: oscSq, input1: oscSaw, value: INITIAL_RATIO_SQ_SAW })
+const { output: oscNote, fader: faderStridency } = ct.addFader({ input0: oscSineTri, input1: oscSqSaw, value: INITIAL_RATIO_STRIDENCY })
+const { output: oscs, fader: faderNoise } = ct.addFader({ input0: oscNote, input1: ct.whiteNoise, value: INITIAL_RATIO_NOISE })
 const oscGain = new Tone.Gain(1)
 oscs.connect(oscGain)
 
@@ -42,7 +48,7 @@ const { input: resInput, output: resOutput, wet: resWet } = ct.addResonators({ d
 ]})
 oscGain.connect(resInput)
 
-const { input: mstrIn, gain: mstrGn, switch: mstrSw, reverb: mstrRv } = ct.addMasterBox({ initVol: INITIAL_VOLUME, reverbTimeS: LONG_REVERB_TIME_S, reverbWet: LONG_REVERB_WET })
+const { input: mstrIn, gain: mstrGn, switch: mstrSw, reverb: mstrRv } = ct.addMasterBox({ initVol: INITIAL_VOLUME, reverbTimeS: REVERB_TIME_S, reverbWet: REVERB_WET })
 resOutput.connect(mstrIn)
 
 
@@ -53,24 +59,28 @@ const SynthPad = () => {
 
     const [baseFreqValue, setBaseFreqValue] = useState(INITIAL_BASE_FREQ_HZ)
     const [masterVolumeGainValue, setMasterVolumeGainValue] = useState(INITIAL_VOLUME)
-    const [noiseRatioValue, setNoiseRatioValue] = useState(INITIAL_NOISE_RATIO)
-    const [toneRatioValue, setToneRatioValue] = useState(INITIAL_TONE_RATIO)
-    const [overtoneMultValue, setOvertoneMultValue] = useState(INITIAL_OVERTONE_MULT)
+    const [ratioSineTriValue, setRatioSineTriValue] = useState(INITIAL_RATIO_SINE_TRI)
+    const [ratioSqSawValue, setRatioSqSawValue] = useState(INITIAL_RATIO_SQ_SAW)
+    const [ratioStridencyValue, setRatioStridencyValue] = useState(INITIAL_RATIO_STRIDENCY)
+    const [sawOvertoneMultValue, setSawOvertoneMultValue] = useState(INITIAL_SAW_OVERTONE_MULT)
     const [resonatorsGainValue, setResonatorsGainValue] = useState(1)
-    const [longReverbWetValue, setLongReverbWetValue] = useState(LONG_REVERB_WET)
+    const [longReverbWetValue, setLongReverbWetValue] = useState(REVERB_WET)
+    const [ratioNoiseValue, setRatioNoiseValue] = useState(INITIAL_RATIO_NOISE)
     
-    const updateBaseFreq = e => updateFn(e, baseFreqSignal, setBaseFreqValue, v => `New base freq: ${v} Hz`)
-    const updateMasterVolume = e => updateFn(e, mstrGn, setMasterVolumeGainValue, v => `New master volume: ${v}`)
-    const updateNoiseRatio = e => updateFn(e, faderNoise, setNoiseRatioValue, v => `New noise ratio: ${v}`)
-    const updateToneRatio = e => updateFn(e, faderTone, setToneRatioValue, v => `New tone ratio: ${v}`)
-    const updateOvertoneMult = e => updateFn(e, fm1, setOvertoneMultValue, v => `New overtone mult: ${v}`)
-    const updateResonatorsGain = e => updateFn(e, resWet, setResonatorsGainValue, v => `New resonators gain: ${v}`)
-    const updateLongReverbWet = e => updateFn(e, mstrRv, setLongReverbWetValue, v => `New long reverb wet: ${v}`)
+    const updateBaseFreq = e => updateSlider(e, baseFreqSignal, setBaseFreqValue, v => `New base freq in Hz: ${v}`)
+    const updateMasterVolume = e => updateSlider(e, mstrGn, setMasterVolumeGainValue, v => `New master volume: ${v}`)
+    const updateRatioSineTri = e => updateSlider(e, faderSineTri, setRatioSineTriValue, v => `New ratio sine to triangle: ${v}`)
+    const updateRatioSqSaw = e => updateSlider(e, faderSqSaw, setRatioSqSawValue, v => `New ratio square to sawtooth: ${v}`)
+    const updateRatioStridency = e => updateSlider(e, faderStridency, setRatioStridencyValue, v => `New ratio stridency: ${v}`)
+    const updateSawOvertoneMult = e => updateSlider(e, fmSaw, setSawOvertoneMultValue, v => `New saw overtone mult: ${v}`)
+    const updateResonatorsGain = e => updateSlider(e, resWet, setResonatorsGainValue, v => `New resonators gain: ${v}`)
+    const updateLongReverbWet = e => updateSlider(e, mstrRv, setLongReverbWetValue, v => `New long reverb wet: ${v}`)
+    const updateRatioNoise = e => updateSlider(e, faderNoise, setRatioNoiseValue, v => `New ratio noise: ${v}`)
     
-    const updateFn = (e, toneParam, reactSetter, logFn) => {
+    const updateSlider = (e, toneParam, reactSetter, logFn) => {
         const newVal = e.target.value
         logger(toneParam)
-        toneParam.setTargetAtTime(newVal, Tone.now(), UPDATE_PARAM_TIME_S)
+        toneParam.setTargetAtTime(newVal, Tone.now(), UPDATE_SLIDER_TIME_S)
         reactSetter(newVal)
         logger(logFn(newVal))
     }
@@ -95,7 +105,7 @@ const SynthPad = () => {
     }
     
     const rampMainSwitchGain = v => {
-        mstrSw.setTargetAtTime(v, Tone.now(), UPDATE_PARAM_TIME_S)
+        mstrSw.setTargetAtTime(v, Tone.now(), UPDATE_SLIDER_TIME_S)
     }
 
     const playTune = () => {
@@ -177,32 +187,41 @@ const SynthPad = () => {
                 value={masterVolumeGainValue}
                 onChange={updateMasterVolume}
             />
-            <p>Noise Ratio: </p>
-            <input
-                type="range"
-                min='0'
-                max='0.1'
-                step='0.001'
-                value={noiseRatioValue}
-                onChange={updateNoiseRatio}
-            />
-            <p>Tone Ratio: </p>
+            <p>Sine to Triangle Ratio: </p>
             <input
                 type="range"
                 min='0'
                 max='1'
                 step='0.01'
-                value={toneRatioValue}
-                onChange={updateToneRatio}
+                value={ratioSineTriValue}
+                onChange={updateRatioSineTri}
             />
-            <p>Overtone Mult: </p>
+            <p>Square to Sawtooth Ratio: </p>
+            <input
+                type="range"
+                min='0'
+                max='1'
+                step='0.01'
+                value={ratioSqSawValue}
+                onChange={updateRatioSqSaw}
+            />
+            <p>Stridency Ratio: </p>
+            <input
+                type="range"
+                min='0'
+                max='1'
+                step='0.01'
+                value={ratioStridencyValue}
+                onChange={updateRatioStridency}
+            />
+            <p>Saw Overtone Mult: </p>
             <input
                 type="range"
                 min='0.5'
                 max='5'
                 step='0.5'
-                value={overtoneMultValue}
-                onChange={updateOvertoneMult}
+                value={sawOvertoneMultValue}
+                onChange={updateSawOvertoneMult}
             />
             <p>Resonators Gain: </p>
             <input
@@ -221,6 +240,15 @@ const SynthPad = () => {
                 step='0.05'
                 value={longReverbWetValue}
                 onChange={updateLongReverbWet}
+            />
+            <p>Noise Ratio: </p>
+            <input
+                type="range"
+                min='0'
+                max='0.1'
+                step='0.001'
+                value={ratioNoiseValue}
+                onChange={updateRatioNoise}
             />
         </div>
     );
